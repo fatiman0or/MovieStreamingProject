@@ -28,7 +28,7 @@ Before running the project, make sure you have the following installed:
 
 ### 📦 3. Required Python Libraries
 Install all required dependencies using **pip**:
--pip install flask pymongo bson
+pip install flask pymongo bson
 
 ---
 
@@ -52,4 +52,22 @@ The API is now live and ready for use. You can test routes such as:
 -GET /movies/<movie_id>/reviews → Get reviews for a specific movie
 
 -GET /movies/search?query=<movie_name> → Search for movies by title, director, or cast
+
+## 🧠 Technical Aspects
+
+Database: MongoDB (NoSQL)
+
+Backend Framework: Flask
+
+APIs: RESTful APIs using Flask routes
+
+Data Handling: PyMongo for MongoDB queries
+
+Similarity Algorithm: SequenceMatcher from difflib for hybrid movie search
+
+Indexes:
+
+Text index on title, director, and cast.name in the Movies collection
+
+Single-field index on movie_id in the WatchHistory collection
 
