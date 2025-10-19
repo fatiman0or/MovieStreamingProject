@@ -97,5 +97,6 @@ The dataset is manually initialized in main.py and consists of:
 ## 👩‍💻 Author
 
 Fatima Noor
+
 COMSATS University — Advanced Database Project
 
