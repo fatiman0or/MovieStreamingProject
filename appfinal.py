@@ -1,43 +1,169 @@
-from flask import Flask, request, jsonify
-from pymongo import MongoClient
+# appfinal.py
+from fastapi import FastAPI, HTTPException, Query
 from bson.objectid import ObjectId
-from datetime import datetime
 from difflib import SequenceMatcher
-
-
-app = Flask(__name__)
-
-# Connect to Mongo DB
-client = MongoClient("mongodb://localhost:27017/")
-db = client["MovieStreamingDB_NewFinal"]
-
-movies_col = db["Movies"]
-users_col = db["Users"]
-reviews_col = db["Reviews"]
-watch_col = db["WatchHistory"]
-
-def similarity(a, b):
-    """Returns a ratio between 0 and 1 indicating how similar two strings are"""
-    return SequenceMatcher(None, a.lower(), b.lower()).ratio()
+from datetime import datetime
+import json
+from fastapi.responses import JSONResponse
+from sentence_transformers import SentenceTransformer
+import numpy as np
 
 
 
+# ✅ Import collections from main.py
+from main import movies_col, users_col, reviews_col, watch_col
+
+# Create FastAPI app
+app = FastAPI(
+    title="🎬 Movie Streaming API",
+    version="2.0",
+    description="FastAPI version of the Movie Streaming backend"
+)
+
+# Initialize embedding model
+embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+
+
+# Semantic Search 
+
+def semantic_similarity_search(query: str, top_k: int = 5):
+    """
+    Returns top_k movies most semantically similar to the query.
+    Uses precomputed embeddings stored in each movie document.
+    """
+    # Compute embedding for query
+    query_embedding = embedding_model.encode(query)
+
+    results = []
+    for movie in movies_col.find({}):
+        if "embedding" in movie:
+            movie_embedding = np.array(movie["embedding"])
+            # Cosine similarity
+            similarity = np.dot(query_embedding, movie_embedding) / (
+                np.linalg.norm(query_embedding) * np.linalg.norm(movie_embedding)
+            )
+            results.append({
+                "movie_id": str(movie["_id"]),
+                "title": movie.get("title", "Unknown"),
+                "director": movie.get("director", "Unknown"),
+                "genres": movie.get("genres", []),
+                "rating": movie.get("rating", 0),
+                "similarity": round(float(similarity), 3)
+            })
+
+    # Sort descending by similarity
+    results.sort(key=lambda x: x["similarity"], reverse=True)
+
+    return results[:top_k]
+
+# ---------------------------
+# HYBRID SEARCH COMPONENTS
+# ---------------------------
+
+def reciprocal_rank_fusion(rankings: list[list[dict]], k: int = 60) -> list[dict]:
+    fused_scores = {}
+    
+    for ranking in rankings:
+        for rank, item in enumerate(ranking):
+            movie_id = item['movie_id']
+            score = 1 / (k + rank + 1)
+            fused_scores[movie_id] = fused_scores.get(movie_id, 0) + score
+            
+    sorted_fused_scores = sorted(
+        fused_scores.items(), 
+        key=lambda item: item[1], 
+        reverse=True
+    )
+    
+    final_results = []
+    metadata_map = {}
+    
+    for ranking in rankings:
+        for item in ranking:
+            metadata_map[item['movie_id']] = {
+                "title": item.get('title', 'Unknown'),
+                "director": item.get('director', 'Unknown'),
+                "genres": item.get('genres', []),
+                "rating": item.get('rating', 0),
+            }
+
+    for movie_id, score in sorted_fused_scores:
+        metadata = metadata_map.get(movie_id, {})
+        final_results.append({
+            "movie_id": movie_id,
+            "title": metadata.get('title', 'Unknown'),
+            "rrf_score": round(score, 4)
+        })
+        
+    return final_results
+
+
+def keyword_search_logic_for_rrf(query: str, search_k: int = 50):
+    results = []
+    query_lower = query.lower()
+    
+    for movie in movies_col.find({}):
+        title_sim = SequenceMatcher(None, query_lower, movie.get("title","").lower()).ratio()
+        director_sim = SequenceMatcher(None, query_lower, movie.get("director","").lower()).ratio()
+        
+        # Calculate max similarity for cast
+        cast_sim = max([
+            SequenceMatcher(None, query_lower, c.get("name","").lower()).ratio() 
+            for c in movie.get("cast",[]) 
+            if isinstance(c, dict) or isinstance(c, str)
+        ] + [0])
+        
+        sim_score = max(title_sim, director_sim, cast_sim)
+        
+        # Use a low threshold to ensure enough candidates for RRF
+        if sim_score < 0.5:
+            continue
+            
+        results.append({
+            "movie_id": str(movie["_id"]),
+            "title": movie.get("title","Unknown"),
+            "similarity": round(sim_score,2)
+        })
+        
+    results.sort(key=lambda x: x["similarity"], reverse=True)
+    return results[:search_k]
+
+
+@app.get("/movies/search/hybrid")
+def hybrid_search(query: str = Query(..., min_length=1), top_k: int = 10):
+    """
+    Combines Keyword and Semantic search results using Reciprocal Rank Fusion (RRF).
+    """
+    search_k = max(2 * top_k, 20) 
+
+    # 1. Get rankings from both methods
+    semantic_results = semantic_similarity_search(query, top_k=search_k)
+    keyword_results = keyword_search_logic_for_rrf(query, search_k=search_k)
+
+    # 2. Fuse the rankings
+    rankings_to_fuse = [semantic_results, keyword_results]
+    hybrid_results = reciprocal_rank_fusion(rankings_to_fuse)
+    
+    # 3. Return the top_k results
+    return {"query": query, "results": hybrid_results[:top_k]}
+
+# ---------------------------
 # ROUTES
+# ---------------------------
 
-# home route
-
-@app.route('/')
+@app.get("/")
 def home():
-    return "🎬 Movie Streaming API is running!"
+    """Root route to confirm API is running."""
+    return {"message": "🎬 Movie Streaming API is running with FastAPI!"}
 
-# to get watch history of a specific user
 
-@app.route('/users/<user_id>/history', methods=['GET'])
-def get_watch_history(user_id):
+# ✅ Get Watch History of a Specific User
+@app.get("/users/{user_id}/history")
+def get_watch_history(user_id: str):
+    if not ObjectId.is_valid(user_id):
+        raise HTTPException(status_code=400, detail="Invalid user ID")
+
     try:
-        if not ObjectId.is_valid(user_id):
-            return jsonify({"error": "Invalid user ID"}), 400
-
         history_cursor = watch_col.find({"user_id": ObjectId(user_id)})
         history_list = []
 
@@ -49,19 +175,20 @@ def get_watch_history(user_id):
                 "watch_duration": entry["watch_duration"]
             })
 
-        return jsonify({"user_id": user_id, "history": history_list})
+        return JSONResponse(
+    content=json.loads(json.dumps({"user_id": user_id, "history": history_list}, indent=4))
+)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
-# to get reviews of a specific movie
 
-@app.route('/movies/<movie_id>/reviews', methods=['GET'])
-def get_movie_reviews(movie_id):
-    # Movie Reviews code
+# ✅ Get Reviews for a Specific Movie
+@app.get("/movies/{movie_id}/reviews")
+def get_movie_reviews(movie_id: str):
+    if not ObjectId.is_valid(movie_id):
+        raise HTTPException(status_code=400, detail="Invalid movie ID")
+
     try:
-        if not ObjectId.is_valid(movie_id):
-            return jsonify({"error": "Invalid movie ID"}), 400
-
         reviews_cursor = reviews_col.find({"movie_id": ObjectId(movie_id)})
         reviews_list = []
 
@@ -73,81 +200,115 @@ def get_movie_reviews(movie_id):
                 "review_text": review["review_text"]
             })
 
-        return jsonify({"movie_id": movie_id, "reviews": reviews_list})
+        return {"movie_id": movie_id, "reviews": reviews_list}
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
-from difflib import SequenceMatcher
-from flask import request, jsonify
+@app.get("/movies/search/keyword")
+def search_movies_keyword(query: str):
+    results = []
+    query_lower = query.lower()
 
-# hybrid search
+    for movie in movies_col.find():
+        # Get movie info
+        title = movie.get("title", "")
+        director = movie.get("director", "")
+        cast = movie.get("cast", [])
 
-@app.route('/movies/search', methods=['GET'])
-def hybrid_search():
-    query = request.args.get("query", "").strip()
-    if not query:
-        return jsonify({"error": "Query parameter is required"}), 400
+        # Normalize for comparison
+        title_lower = title.lower()
 
-    results_list = []
+        # Director can be string or list
+        if isinstance(director, list):
+            director_lower = " ".join(director).lower()
+        else:
+            director_lower = str(director).lower()
 
-    # Precompute watch counts
-    watch_counts = {}
-    for entry in watch_col.find({}):
-        movie_id_str = str(entry["movie_id"])
-        watch_counts[movie_id_str] = watch_counts.get(movie_id_str, 0) + 1
+        # Cast: convert list of dicts or strings into lowercase names
+        cast_lower = []
+        for c in cast:
+            if isinstance(c, dict):
+                name = c.get("name", "").lower()
+            else:
+                name = str(c).lower()
+            if name:
+                cast_lower.append(name)
 
-    for movie in movies_col.find({}):
-        movie_id_str = str(movie["_id"])
+        # ✅ Direct substring match (high confidence)
+        if (
+            query_lower in title_lower
+            or query_lower in director_lower
+            or any(query_lower in c for c in cast_lower)
+        ):
+            sim_score = 1.0
+        else:
+            # 🔤 Fallback: fuzzy character similarity
+            sim_score = max(
+                SequenceMatcher(None, query_lower, title_lower).ratio(),
+                SequenceMatcher(None, query_lower, director_lower).ratio(),
+                max((SequenceMatcher(None, query_lower, c).ratio() for c in cast_lower), default=0)
+            )
 
-        # Compute title similarity
-        title_similarity = SequenceMatcher(None, query.lower(), movie.get("title", "").lower()).ratio()
-        # Compute director similarity
-        director_similarity = SequenceMatcher(None, query.lower(), movie.get("director", "").lower()).ratio()
-        # Compute cast similarity
-        cast_similarity = 0
-        matched_cast = []
-        for member in movie.get("cast", []):
-            member_name = member.get("name", "")
-            sim = SequenceMatcher(None, query.lower(), member_name.lower()).ratio()
-            if sim > 0.5:  # threshold for matching cast
-                cast_similarity = max(cast_similarity, sim)
-                matched_cast.append(member_name)
+        # 🎯 Apply smart threshold (tuneable)
+        if sim_score >= 0.65:
+            results.append({
+                "movie_id": str(movie["_id"]),
+                "title": title,
+                "director": director,
+                "similarity": round(sim_score, 2)
+            })
 
-        # Take the maximum similarity across title, director, and cast
-        similarity_score = max(title_similarity, director_similarity, cast_similarity)
+    # 🧹 Sort high-to-low by similarity
+    results.sort(key=lambda x: x["similarity"], reverse=True)
+    return {"query": query, "results": results}
 
-        # Skip if similarity is too low
-        if similarity_score < 0.5:
-            continue
+from datetime import timedelta
 
-        # Weighted score: 50% similarity, 30% rating (out of 10), 20% popularity
-        weighted_score = (
-            0.5 * similarity_score +
-            0.3 * (movie.get("rating", 0) / 10) +
-            0.2 * (watch_counts.get(movie_id_str, 0) / max(1, max(watch_counts.values(), default=1)))
-        )
+@app.get("/movies/top-watched")
+def top_watched_movies_last_month(top_k: int = 5):
+    """
+    Returns the top_k most-watched movies in the last 30 days.
+    Uses aggregation on watch history.
+    """
+    try:
+        # Calculate date 30 days ago
+        thirty_days_ago = datetime.now() - timedelta(days=30)
 
-        results_list.append({
-            "movie_id": movie_id_str,
-            "title": movie.get("title", "Unknown"),
-            "director": movie.get("director", "Unknown"),
-            "genres": movie.get("genres", []),
-            "rating": movie.get("rating", 0),
-            "cast": [member.get("name", "Unknown") for member in movie.get("cast", [])],
-            "matched_cast": matched_cast,
-            "popularity": watch_counts.get(movie_id_str, 0),
-            "similarity": round(similarity_score, 2),
-            "weighted_score": round(weighted_score, 2)
-        })
+        # MongoDB aggregation pipeline
+        pipeline = [
+            {"$match": {"timestamp": {"$gte": thirty_days_ago}}},
+            {"$group": {
+                "_id": "$movie_id",
+                "watch_count": {"$sum": 1}
+            }},
+            {"$sort": {"watch_count": -1}},
+            {"$limit": top_k},
+            {"$lookup": {
+                "from": "Movies",
+                "localField": "_id",
+                "foreignField": "_id",
+                "as": "movie_info"
+            }},
+            {"$unwind": "$movie_info"},
+            {"$project": {
+                "_id": 0,
+                "movie_id": {"$toString": "$_id"},
+                "title": "$movie_info.title",
+                "watch_count": 1
+            }}
+        ]
 
-    # Sort results by weighted_score descending
-    results_list.sort(key=lambda x: x["weighted_score"], reverse=True)
+        results = list(watch_col.aggregate(pipeline))
 
-    return jsonify({"query": query, "results": results_list})
+        return {"top_k": top_k, "results": results}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 
-# RUN SERVER
 
-if __name__ == "__main__":
-    app.run(debug=True)
+
+# Run this command in your terminal to start the FastAPI server:
+# python -m uvicorn appfinal:app --reload
+
