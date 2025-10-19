@@ -30,6 +30,24 @@ Before running the project, make sure you have the following installed:
 Install all required dependencies using **pip**:
 -pip install flask pymongo bson
 
-## How to Run the Project
--Populate the MongoDB database by running: python main.py.
+---
+
+### 🚀 4. How to Run the Project
+-Populate the MongoDB database by running:
+python main.py 
+
+-Start the Flask API server by running:
+python appfinal.py
+
+-Open your browser or API testing tool (like Postman) and go to:
+http://127.0.0.1:5000/
+
+-You should see the message:
+🎬 Movie Streaming API is running!
+
+The API is now live and ready for use. You can test routes such as:
+
+-GET /users/<user_id>/history → Fetch a user's watch history
+-GET /movies/<movie_id>/reviews → Get reviews for a specific movie
+-GET /movies/search?query=<movie_name> → Search for movies by title, director, or cast
 
