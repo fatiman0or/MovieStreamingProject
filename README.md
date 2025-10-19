@@ -48,6 +48,8 @@ http://127.0.0.1:5000/
 The API is now live and ready for use. You can test routes such as:
 
 -GET /users/<user_id>/history → Fetch a user's watch history
+
 -GET /movies/<movie_id>/reviews → Get reviews for a specific movie
+
 -GET /movies/search?query=<movie_name> → Search for movies by title, director, or cast
 
