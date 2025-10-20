@@ -113,4 +113,108 @@ Dynamically identifies and returns the most-watched movies from the last 30 days
 | **GET** | `/users/{user_id}/history` | Fetch the watch history of a specific user |
 | **GET** | `/movies/top-watched` | Retrieve top-watched movies from the last 30 days |
 
+---
+
+## Database Design
+
+**Database Name:** `MovieStreamingDB_NewFinal`
+
+The database follows a **NoSQL document structure** using **MongoDB**, consisting of four main collections — each designed to handle different aspects of the movie streaming platform.
+
+---
+
+### Movies Collection
+
+Stores all movie-related data including metadata, cast, and calculated embeddings for semantic search.
+
+| **Field** | **Type** | **Description** |
+|------------|-----------|-----------------|
+| `_id` | ObjectId | Unique identifier for each movie |
+| `title` | String | Movie title |
+| `release_year` | Integer | Year the movie was released |
+| `genres` | Array\<String> | List of genres associated with the movie |
+| `cast` | Array\<Document> | Each object includes `{ name: String, role: String }` |
+| `director` | String | Director of the movie |
+| `rating` | Float | Average movie rating |
+| `embedding` | Array\<Float> | Vector representation for hybrid search and similarity matching |
+
+---
+
+### Users Collection
+
+Stores registered user details and subscription information.
+
+| **Field** | **Type** | **Description** |
+|------------|-----------|-----------------|
+| `_id` | ObjectId | Unique identifier for each user |
+| `name` | String | User’s full name |
+| `email` | String | User’s email address |
+| `subscription_type` | String | Subscription type (e.g., Basic, Premium) |
+
+---
+
+### 📝 Reviews Collection
+
+Stores user-generated reviews linked to both users and movies.
+
+| **Field** | **Type** | **Description** |
+|------------|-----------|-----------------|
+| `_id` | ObjectId | Unique identifier for each review |
+| `user_id` | ObjectId | References the user who wrote the review |
+| `movie_id` | ObjectId | References the movie being reviewed |
+| `rating` | Float | Rating given by the user |
+| `review_text` | String | Written review content |
+
+---
+
+### WatchHistory Collection
+
+Tracks every movie watched by users, including timestamps and durations.
+
+| **Field** | **Type** | **Description** |
+|------------|-----------|-----------------|
+| `_id` | ObjectId | Unique identifier for each watch record |
+| `user_id` | ObjectId | References the user who watched the movie |
+| `movie_id` | ObjectId | References the movie that was watched |
+| `timestamp` | DateTime | Date and time the movie was watched |
+| `watch_duration` | Integer | Duration (in minutes) of the movie watched |
+
+---
+
+### Indexes Implemented
+
+To enhance performance and search efficiency, the following indexes are defined:
+
+| **Collection** | **Field(s)** | **Index Type** | **Purpose** |
+|----------------|---------------|----------------|--------------|
+| **Movies** | `title`, `director`, `cast.name` | **Text Index** | Enables text-based and hybrid movie search |
+| **WatchHistory** | `movie_id` | **Single-field Index** | Speeds up fetching of user watch history and top-watched movies |
+| **Reviews** | `movie_id` | **Single-field Index** | Optimizes queries for fetching reviews of specific movies |
+
+---
+
+## Tech Stack
+
+| **Component** | **Technology** |
+|----------------|----------------|
+| **Language** | Python |
+| **Framework** | FastAPI |
+| **Database** | MongoDB |
+| **Driver / ORM** | PyMongo |
+| **Libraries** | FastAPI, PyMongo, bson, difflib |
+| **Server** | Uvicorn |
+| **Environment** | Localhost (`127.0.0.1:8000`) |
+
+---
+
+## Author
+
+Fatima Noor
+FA23-BCS-051
+COMSATS University
+Advanced Database Project
+
+
+
+
 
