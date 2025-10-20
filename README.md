@@ -71,7 +71,7 @@ You should see the message:
 
 ---
 
-### 🧠 Core Features
+## 🧠 Core Features
 **1. Movie Management**
 
 View and search all movies in the database.
