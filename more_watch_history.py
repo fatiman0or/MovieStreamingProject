@@ -1,16 +1,14 @@
-# add_more_watch_history.py
-
+'''
+this is an attempt to make a few movies be watched over and over again to test aggregation
+but here the dates got messed up
+i did this correctly in more_watch_history2.py
+'''
 from datetime import datetime, timedelta
 from main import watch_col, movies_col, users_col
 
 def add_watch_history():
-    """
-    Adds more watch history entries to the database.
-    - Deliberately repeats watches for a few movies.
-    - Avoids inserting duplicates.
-    """
 
-    # Fetch users and movies from database
+    # fetch users and movies from database
     users = list(users_col.find())
     movies = list(movies_col.find())
 
@@ -20,9 +18,7 @@ def add_watch_history():
 
     watch_entries = []
 
-    # --------------------------
-    # 1️⃣ Repeated watches for first 3 movies
-    # --------------------------
+    # repeated watches for first 3 movies
     repeated_movies_ids = [movies[0]['_id'], movies[1]['_id'], movies[2]['_id']]
     for movie_id in repeated_movies_ids:
         for i in range(3):  # Each movie watched 3 times by different users
@@ -34,9 +30,7 @@ def add_watch_history():
                 "watch_duration": 120 + i*10
             })
 
-    # --------------------------
-    # 2️⃣ Single watches for a few more movies
-    # --------------------------
+    # single watches for a few more movies
     for i, movie in enumerate(movies[3:6]):  # 3 more movies
         user_id = users[i]['_id']
         watch_entries.append({
@@ -46,9 +40,7 @@ def add_watch_history():
             "watch_duration": 90 + i*5
         })
 
-    # --------------------------
-    # 3️⃣ Insert safely (avoid duplicates)
-    # --------------------------
+    # to avoid duplicates
     inserted_count = 0
     for entry in watch_entries:
         exists = watch_col.find_one({
@@ -60,10 +52,8 @@ def add_watch_history():
             watch_col.insert_one(entry)
             inserted_count += 1
 
-    print(f"✅ Added {inserted_count} watch history entries successfully!")
+    print(f" Added {inserted_count} watch history entries successfully!")
 
-# --------------------------
-# Prevent automatic execution when imported
-# --------------------------
+# to prevent automatic execution when imported
 if __name__ == "__main__":
     add_watch_history()

@@ -1,21 +1,20 @@
 from pymongo import MongoClient
 from datetime import datetime
 
-# --- Connection setup (always runs) ---
+# to establish connection 
 client = MongoClient("mongodb://localhost:27017/")
 db = client["MovieStreamingDB_NewFinal"]
 
-# Expose collections for import
 movies_col = db["Movies"]
 users_col = db["Users"]
 reviews_col = db["Reviews"]
 watch_col = db["WatchHistory"]
 
-# --- Only run the setup when executed directly, NOT when imported ---
+# only run this when main.py is executed
 if __name__ == "__main__":
-    print("✅ New database ready!")
+    print(" New database ready!")
 
-    # Movies collection
+    # movies collection
     movies_data = [
         {"title": "The Godfather", "release_year": 1972, "genres": ["Crime", "Drama"],
          "cast": [{"name": "Marlon Brando", "role": "Vito Corleone"}], "director": "Francis Ford Coppola", "rating": 9.2},
@@ -39,7 +38,7 @@ if __name__ == "__main__":
          "cast": [{"name": "Robert Downey Jr.", "role": "Iron Man"}], "director": "Anthony Russo", "rating": 8.4}
     ]
 
-    # Insert movies if not already present
+    # to only insert movies if not already present
     movie_ids = []
     for movie in movies_data:
         existing = movies_col.find_one({"title": movie["title"]})
@@ -48,9 +47,9 @@ if __name__ == "__main__":
             movie_ids.append(result.inserted_id)
         else:
             movie_ids.append(existing["_id"])
-    print("✅ 10 movies added!")
+    print(" 10 movies added!")
 
-    # Users collection
+    # users collection
     users_data = [
         {"name": "Fatima Noor", "email": "fatima@example.com", "subscription_type": "Premium"},
         {"name": "Ali Khan", "email": "ali@example.com", "subscription_type": "Free"},
@@ -64,6 +63,7 @@ if __name__ == "__main__":
         {"name": "Usman Ali", "email": "usman@example.com", "subscription_type": "Standard"}
     ]
 
+    # to only insert users if not already present
     user_ids = []
     for user in users_data:
         existing = users_col.find_one({"email": user["email"]})
@@ -72,9 +72,9 @@ if __name__ == "__main__":
             user_ids.append(result.inserted_id)
         else:
             user_ids.append(existing["_id"])
-    print("✅ 10 users added!")
+    print(" 10 users added!")
 
-    # Reviews collection
+    # reviews collection
     reviews_data = [
         {"user_id": user_ids[0], "movie_id": movie_ids[0], "rating": 10, "review_text": "Wow! Amazing movie, I totally recommend it."},
         {"user_id": user_ids[1], "movie_id": movie_ids[1], "rating": 9, "review_text": "Great film with stunning action scenes."},
@@ -88,13 +88,14 @@ if __name__ == "__main__":
         {"user_id": user_ids[9], "movie_id": movie_ids[9], "rating": 8, "review_text": "Exciting and emotional finale."}
     ]
 
+    # to only insert reviews if not already present
     for review in reviews_data:
         existing = reviews_col.find_one({"user_id": review["user_id"], "movie_id": review["movie_id"]})
         if not existing:
             reviews_col.insert_one(review)
-    print("✅ 10 reviews added!")
+    print(" 10 reviews added!")
 
-    # Watch history
+    # watch history
     watch_history_data = [
         {"user_id": user_ids[0], "movie_id": movie_ids[0], "timestamp": datetime(2025,10,18,20,0,0), "watch_duration": 175},
         {"user_id": user_ids[1], "movie_id": movie_ids[1], "timestamp": datetime(2025,10,18,18,30,0), "watch_duration": 152},
@@ -108,19 +109,25 @@ if __name__ == "__main__":
         {"user_id": user_ids[9], "movie_id": movie_ids[9], "timestamp": datetime(2025,10,10,20,0,0), "watch_duration": 181}
     ]
 
+    # to only insert watch history if not already present
     for watch in watch_history_data:
         existing = watch_col.find_one({"user_id": watch["user_id"], "movie_id": watch["movie_id"], "timestamp": watch["timestamp"]})
         if not existing:
             watch_col.insert_one(watch)
-    print("✅ 10 watch history entries added!")
+    print("10 watch history entries added!")
 
-    # Indexes
+    # to make indexes
     movies_col.create_index([
         ("title", "text"),
         ("director", "text"),
         ("cast.name", "text")
     ])
-    print("✅ Text index created on Movies collection!")
+    print("Text index created on Movies collection!")
 
     watch_col.create_index("movie_id")
-    print("✅ Index created on WatchHistory for movie_id!")
+    print("Index created on WatchHistory for movie_id!")
+
+    reviews_col.create_index("movie_id")
+    reviews_col.create_index("user_id")
+    print("Indexes created on Reviews for movie_id and user_id!")
+

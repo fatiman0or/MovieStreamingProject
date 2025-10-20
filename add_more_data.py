@@ -9,9 +9,9 @@ users_col = db["Users"]
 reviews_col = db["Reviews"]
 watch_col = db["WatchHistory"]
 
-print("✅ Connected to existing database!")
+print(" Connected to existing database!")
 
-# ------------------- ADD MORE MOVIES -------------------
+# add more data for movies collection
 new_movies = [
     {"title": "Interstellar", "release_year": 2014, "genres": ["Sci-Fi", "Adventure"],
      "cast": [{"name": "Matthew McConaughey", "role": "Cooper"}], "director": "Christopher Nolan", "rating": 8.6},
@@ -35,6 +35,7 @@ new_movies = [
      "cast": [{"name": "Idina Menzel", "role": "Elsa"}], "director": "Chris Buck", "rating": 7.4}
 ]
 
+# i did this to make sure theres no duplicatiion
 new_movie_ids = []
 for movie in new_movies:
     existing = movies_col.find_one({"title": movie["title"]})
@@ -43,9 +44,9 @@ for movie in new_movies:
         new_movie_ids.append(res.inserted_id)
     else:
         new_movie_ids.append(existing["_id"])
-print(f"✅ Added {len(new_movie_ids)} new movies!")
+print(f" Added {len(new_movie_ids)} new movies!")
 
-# ------------------- ADD MORE USERS -------------------
+# add more data for users collection
 new_users = [
     {"name": "Ahmed Raza", "email": "ahmed.raza@example.com", "subscription_type": "Premium"},
     {"name": "Hina Malik", "email": "hina.malik@example.com", "subscription_type": "Standard"},
@@ -59,6 +60,7 @@ new_users = [
     {"name": "Emaan Fatima", "email": "emaan.fatima@example.com", "subscription_type": "Premium"}
 ]
 
+# i did this to make sure theres no duplicatiion
 new_user_ids = []
 for user in new_users:
     existing = users_col.find_one({"email": user["email"]})
@@ -67,9 +69,10 @@ for user in new_users:
         new_user_ids.append(res.inserted_id)
     else:
         new_user_ids.append(existing["_id"])
-print(f"✅ Added {len(new_user_ids)} new users!")
+print(f" Added {len(new_user_ids)} new users!")
 
-# ------------------- ADD MORE REVIEWS -------------------
+
+# add more data for reviews collection
 new_reviews = []
 for i in range(10):
     new_reviews.append({
@@ -79,13 +82,14 @@ for i in range(10):
         "review_text": f"Enjoyed watching movie #{i+11}! Great experience."
     })
 
+# i did this to make sure theres no duplicatiion
 for review in new_reviews:
     existing = reviews_col.find_one({"user_id": review["user_id"], "movie_id": review["movie_id"]})
     if not existing:
         reviews_col.insert_one(review)
-print("✅ 10 new reviews added!")
+print(" 10 new reviews added!")
 
-# ------------------- ADD MORE WATCH HISTORY -------------------
+# add more data for reviews collection
 for i in range(10):
     new_entry = {
         "user_id": new_user_ids[i],
@@ -96,6 +100,6 @@ for i in range(10):
     existing = watch_col.find_one({"user_id": new_entry["user_id"], "movie_id": new_entry["movie_id"]})
     if not existing:
         watch_col.insert_one(new_entry)
-print("✅ 10 new watch history entries added!")
+print("10 new watch history entries added!")
 
-print("🎉 All new data added safely without overwriting old entries!")
+print(" All new data added safely without overwriting old entries!")

@@ -1,4 +1,4 @@
-# appfinal.py
+
 from fastapi import FastAPI, HTTPException, Query
 from bson.objectid import ObjectId
 from difflib import SequenceMatcher
@@ -10,35 +10,31 @@ import numpy as np
 
 
 
-# ✅ Import collections from main.py
+# to import my collections
 from main import movies_col, users_col, reviews_col, watch_col
 
-# Create FastAPI app
+# to create  fast api
 app = FastAPI(
     title="🎬 Movie Streaming API",
     version="2.0",
     description="FastAPI version of the Movie Streaming backend"
 )
 
-# Initialize embedding model
+# to initialize the embedding model
 embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
 
 
-# Semantic Search 
+# function for semantic search
 
 def semantic_similarity_search(query: str, top_k: int = 5):
-    """
-    Returns top_k movies most semantically similar to the query.
-    Uses precomputed embeddings stored in each movie document.
-    """
-    # Compute embedding for query
+
     query_embedding = embedding_model.encode(query)
 
     results = []
     for movie in movies_col.find({}):
         if "embedding" in movie:
             movie_embedding = np.array(movie["embedding"])
-            # Cosine similarity
+            # cosine similarity
             similarity = np.dot(query_embedding, movie_embedding) / (
                 np.linalg.norm(query_embedding) * np.linalg.norm(movie_embedding)
             )
@@ -51,15 +47,14 @@ def semantic_similarity_search(query: str, top_k: int = 5):
                 "similarity": round(float(similarity), 3)
             })
 
-    # Sort descending by similarity
+    # to sort descending by similarity
     results.sort(key=lambda x: x["similarity"], reverse=True)
 
     return results[:top_k]
 
-# ---------------------------
-# HYBRID SEARCH COMPONENTS
-# ---------------------------
+# making 2 functions reciprocal_rank_fusion and keyword_search_logic_for_rrf to use in hybrid search
 
+# integrates results from various search algos boosting items that consistently appear near the top using RRF logic
 def reciprocal_rank_fusion(rankings: list[list[dict]], k: int = 60) -> list[dict]:
     fused_scores = {}
     
@@ -97,7 +92,7 @@ def reciprocal_rank_fusion(rankings: list[list[dict]], k: int = 60) -> list[dict
         
     return final_results
 
-
+# gets movies matching user keywords using text search and returns ranked results for fusion
 def keyword_search_logic_for_rrf(query: str, search_k: int = 50):
     results = []
     query_lower = query.lower()
@@ -106,7 +101,7 @@ def keyword_search_logic_for_rrf(query: str, search_k: int = 50):
         title_sim = SequenceMatcher(None, query_lower, movie.get("title","").lower()).ratio()
         director_sim = SequenceMatcher(None, query_lower, movie.get("director","").lower()).ratio()
         
-        # Calculate max similarity for cast
+        # to calculate max similarity for cast
         cast_sim = max([
             SequenceMatcher(None, query_lower, c.get("name","").lower()).ratio() 
             for c in movie.get("cast",[]) 
@@ -115,7 +110,7 @@ def keyword_search_logic_for_rrf(query: str, search_k: int = 50):
         
         sim_score = max(title_sim, director_sim, cast_sim)
         
-        # Use a low threshold to ensure enough candidates for RRF
+        # keeping a low threshold to ensure enough candidates for RRF
         if sim_score < 0.5:
             continue
             
@@ -136,28 +131,26 @@ def hybrid_search(query: str = Query(..., min_length=1), top_k: int = 10):
     """
     search_k = max(2 * top_k, 20) 
 
-    # 1. Get rankings from both methods
+    # first get rankings from both methods
     semantic_results = semantic_similarity_search(query, top_k=search_k)
     keyword_results = keyword_search_logic_for_rrf(query, search_k=search_k)
 
-    # 2. Fuse the rankings
+    # then fuse the rankings
     rankings_to_fuse = [semantic_results, keyword_results]
     hybrid_results = reciprocal_rank_fusion(rankings_to_fuse)
     
-    # 3. Return the top_k results
+    # finally return the top_k results
     return {"query": query, "results": hybrid_results[:top_k]}
 
-# ---------------------------
-# ROUTES
-# ---------------------------
+# all api routes
 
+# to confirm api is running
 @app.get("/")
 def home():
-    """Root route to confirm API is running."""
     return {"message": "🎬 Movie Streaming API is running with FastAPI!"}
 
 
-# ✅ Get Watch History of a Specific User
+# to get watch history of a specific User
 @app.get("/users/{user_id}/history")
 def get_watch_history(user_id: str):
     if not ObjectId.is_valid(user_id):
@@ -175,6 +168,7 @@ def get_watch_history(user_id: str):
                 "watch_duration": entry["watch_duration"]
             })
 
+        # return formatted JSON response
         return JSONResponse(
     content=json.loads(json.dumps({"user_id": user_id, "history": history_list}, indent=4))
 )
@@ -182,7 +176,7 @@ def get_watch_history(user_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ✅ Get Reviews for a Specific Movie
+# to get reviews for a specific movie
 @app.get("/movies/{movie_id}/reviews")
 def get_movie_reviews(movie_id: str):
     if not ObjectId.is_valid(movie_id):
@@ -199,32 +193,33 @@ def get_movie_reviews(movie_id: str):
                 "rating": review["rating"],
                 "review_text": review["review_text"]
             })
-
+        # return formatted JSON response
         return {"movie_id": movie_id, "reviews": reviews_list}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# keyword based movie search
 @app.get("/movies/search/keyword")
 def search_movies_keyword(query: str):
     results = []
     query_lower = query.lower()
 
     for movie in movies_col.find():
-        # Get movie info
+        # to get movie info
         title = movie.get("title", "")
         director = movie.get("director", "")
         cast = movie.get("cast", [])
 
-        # Normalize for comparison
+        # to normalize for comparison
         title_lower = title.lower()
 
-        # Director can be string or list
+        # movie director can be string or list
         if isinstance(director, list):
             director_lower = " ".join(director).lower()
         else:
             director_lower = str(director).lower()
 
-        # Cast: convert list of dicts or strings into lowercase names
+        # to convert into lowercase names
         cast_lower = []
         for c in cast:
             if isinstance(c, dict):
@@ -234,7 +229,7 @@ def search_movies_keyword(query: str):
             if name:
                 cast_lower.append(name)
 
-        # ✅ Direct substring match (high confidence)
+        # direct substring match (high confidence)
         if (
             query_lower in title_lower
             or query_lower in director_lower
@@ -242,14 +237,14 @@ def search_movies_keyword(query: str):
         ):
             sim_score = 1.0
         else:
-            # 🔤 Fallback: fuzzy character similarity
+            # fuzzy character similarity
             sim_score = max(
                 SequenceMatcher(None, query_lower, title_lower).ratio(),
                 SequenceMatcher(None, query_lower, director_lower).ratio(),
                 max((SequenceMatcher(None, query_lower, c).ratio() for c in cast_lower), default=0)
             )
 
-        # 🎯 Apply smart threshold (tuneable)
+        # to apply a smart threshold (tuneable)
         if sim_score >= 0.65:
             results.append({
                 "movie_id": str(movie["_id"]),
@@ -258,12 +253,13 @@ def search_movies_keyword(query: str):
                 "similarity": round(sim_score, 2)
             })
 
-    # 🧹 Sort high-to-low by similarity
+    # Sort high to low by similarity
     results.sort(key=lambda x: x["similarity"], reverse=True)
     return {"query": query, "results": results}
 
 from datetime import timedelta
 
+# top-watched movies in the last 30 days
 @app.get("/movies/top-watched")
 def top_watched_movies_last_month(top_k: int = 5):
     """
@@ -271,10 +267,10 @@ def top_watched_movies_last_month(top_k: int = 5):
     Uses aggregation on watch history.
     """
     try:
-        # Calculate date 30 days ago
+        # to calculate date 30 days ago
         thirty_days_ago = datetime.now() - timedelta(days=30)
 
-        # MongoDB aggregation pipeline
+        # mongo db aggregation pipeline
         pipeline = [
             {"$match": {"timestamp": {"$gte": thirty_days_ago}}},
             {"$group": {
@@ -305,10 +301,5 @@ def top_watched_movies_last_month(top_k: int = 5):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-
-
-
-# Run this command in your terminal to start the FastAPI server:
 # python -m uvicorn appfinal:app --reload
 
